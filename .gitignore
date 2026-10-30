@@ -1,0 +1,4 @@
+# Se generan al compilar y al correr los experimentos: no se suben al repositorio
+*.exe
+resultados/
+README.md
