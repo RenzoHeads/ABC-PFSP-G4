@@ -47,21 +47,34 @@ int limiteEfectivo(const ParametrosABC& parametros, int trabajos) {
     return static_cast<int>(std::min<long long>(producto, std::numeric_limits<int>::max()));
 }
 
+int ciclosEfectivos(const ParametrosABC& parametros, int trabajos) {
+    if (parametros.ciclos.has_value()) return *parametros.ciclos;
+    const long long ciclos = 250LL + 25LL * trabajos;  // 250 + 25 × n, sin desbordar
+    return static_cast<int>(std::min<long long>(ciclos, std::numeric_limits<int>::max()));
+}
+
 std::string textoLimite(const ParametrosABC& parametros, int trabajos) {
     if (parametros.limite.has_value()) return std::to_string(*parametros.limite);
     if (trabajos <= 0) return "SN × n";
     return std::to_string(limiteEfectivo(parametros, trabajos)) + " (= SN × n)";
 }
 
+std::string textoCiclos(const ParametrosABC& parametros, int trabajos) {
+    if (parametros.ciclos.has_value()) return std::to_string(*parametros.ciclos);
+    if (trabajos <= 0) return "250 + 25 × n";
+    return std::to_string(ciclosEfectivos(parametros, trabajos)) + " (= 250 + 25 × n)";
+}
+
 std::string textoParametros(const ParametrosABC& parametros, int trabajos) {
     return "SN = " + std::to_string(parametros.fuentes) + ", límite = " + textoLimite(parametros, trabajos) +
-           ", MCN = " + std::to_string(parametros.ciclos);
+           ", MCN = " + textoCiclos(parametros, trabajos);
 }
 
 ColoniaABC::ColoniaABC(const Instancia& instancia, const ParametrosABC& parametros, std::uint32_t semilla)
     : instancia_(instancia),
       parametros_(parametros),
       limite_(limiteEfectivo(parametros, instancia.trabajos)),
+      ciclos_(ciclosEfectivos(parametros, instancia.trabajos)),
       semilla_(semilla),
       generador_(semilla) {
     if (instancia_.trabajos < 1 || instancia_.maquinas < 1)
@@ -70,7 +83,7 @@ ColoniaABC::ColoniaABC(const Instancia& instancia, const ParametrosABC& parametr
         throw std::invalid_argument("El número de fuentes (SN) debe ser al menos 1.");
     if (limite_ < 1)
         throw std::invalid_argument("El límite de intentos sin mejora (limit) debe ser al menos 1.");
-    if (parametros_.ciclos < 0)
+    if (ciclos_ < 0)
         throw std::invalid_argument("El número de ciclos (MCN) no puede ser negativo.");
 }
 
@@ -79,7 +92,7 @@ ResultadoCorrida ColoniaABC::ejecutar() {
     generador_.seed(semilla_);
     resultado_ = ResultadoCorrida();
     resultado_.semilla = semilla_;
-    resultado_.convergencia.reserve(static_cast<std::size_t>(parametros_.ciclos) + 1);
+    resultado_.convergencia.reserve(static_cast<std::size_t>(ciclos_) + 1);
 
     const auto inicio = std::chrono::steady_clock::now();
     inicializar();
@@ -87,7 +100,7 @@ ResultadoCorrida ColoniaABC::ejecutar() {
 
     // Con un solo trabajo existe una única secuencia: no hay vecinos que probar.
     const bool hayVecinos = instancia_.trabajos >= 2;
-    for (int ciclo = 1; ciclo <= parametros_.ciclos; ++ciclo) {
+    for (int ciclo = 1; ciclo <= ciclos_; ++ciclo) {
         cicloActual_ = ciclo;
         if (hayVecinos) {
             faseEmpleadas();

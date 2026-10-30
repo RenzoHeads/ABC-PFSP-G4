@@ -187,10 +187,11 @@ void mostrarExperimento(const Experimento& experimento, std::ostream& salida) {
     const std::vector<ResultadoCorrida>& resultados = experimento.resultados;
     const ResultadoCorrida& corridaMejor = resultados[resumen.indiceMejor];
     const std::vector<int>& mejorSecuencia = corridaMejor.mejorSecuencia;
+    const int ciclos = ciclosEfectivos(parametros, instancia.trabajos);
 
     // --- Condiciones del experimento ---------------------------------------------------------
     salida << "\nParámetros del ABC : " << textoParametros(parametros, instancia.trabajos) << "\n";
-    salida << "Criterio de parada : " << parametros.ciclos << " iteraciones (ciclos) por corrida\n";
+    salida << "Criterio de parada : " << ciclos << " iteraciones (ciclos) por corrida\n";
     salida << "Corridas           : " << experimento.corridas << " independientes, semillas "
            << semillaDeCorrida(experimento.semillaBase, 1) << " a "
            << semillaDeCorrida(experimento.semillaBase, experimento.corridas) << "\n";
@@ -211,7 +212,7 @@ void mostrarExperimento(const Experimento& experimento, std::ostream& salida) {
     for (std::size_t k = 0; k < resultados.size(); ++k) {
         const ResultadoCorrida& corrida = resultados[k];
         tablaCorridas.agregarFila({std::to_string(k + 1), std::to_string(corrida.semilla), std::to_string(corrida.mejorCmax),
-                                   std::to_string(parametros.ciclos), std::to_string(corrida.cicloMejor),
+                                   std::to_string(ciclos), std::to_string(corrida.cicloMejor),
                                    formatoDecimal(corrida.tiempoMs, 3), textoSecuencia(corrida.mejorSecuencia)});
     }
     tablaCorridas.imprimir(salida);
@@ -228,7 +229,7 @@ void mostrarExperimento(const Experimento& experimento, std::ostream& salida) {
     salida << "  Tiempo promedio     : " << formatoDecimal(resumen.tiempoPromedioMs, 3) << " ms por corrida  (total "
            << formatoDecimal(resumen.tiempoTotalMs, 3) << " ms)\n";
     salida << "  Iteración promedio en que aparece el mejor valor final: " << formatoDecimal(resumen.cicloMejorPromedio, 1)
-           << " de " << parametros.ciclos << "\n";
+           << " de " << ciclos << "\n";
     salida << "  Evaluaciones del makespan por corrida (promedio): " << formatoDecimal(resumen.evaluacionesPromedio, 1)
            << ";  abejas exploradoras por corrida (promedio): " << formatoDecimal(resumen.abandonosPromedio, 2) << "\n";
     if (resumen.referencia > 0) {
@@ -252,7 +253,7 @@ void mostrarExperimento(const Experimento& experimento, std::ostream& salida) {
     salida << "\nConvergencia: mejor makespan encontrado al terminar cada iteración\n";
     TablaTexto tablaConvergencia;
     tablaConvergencia.agregarColumna("Iteración", false);
-    const std::vector<int> puntos = puntosDeControl(parametros.ciclos);
+    const std::vector<int> puntos = puntosDeControl(ciclos);
     for (const int punto : puntos) tablaConvergencia.agregarColumna(std::to_string(punto), true);
     std::vector<std::string> filaMediana = {"Mediana de las " + std::to_string(resultados.size()) + " corridas"};
     std::vector<std::string> filaMejor = {"Corrida " + std::to_string(resumen.indiceMejor + 1) + " (la mejor)"};

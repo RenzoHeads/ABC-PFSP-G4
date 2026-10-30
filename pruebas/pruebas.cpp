@@ -3,14 +3,17 @@
 //
 // Comprueban cada módulo con valores calculados de antemano, sin depender del azar:
 //   - el makespan del ejemplo del enunciado (§3.3), su tabla C y su Gantt;
-//   - la lectura de las 3 instancias y el rechazo de archivos mal formados;
+//   - la lectura de las 3 instancias, de la matriz de tiempos sin números de máquina
+//     y el rechazo de archivos mal formados;
 //   - los 4 operadores y el generador aleatorio portable;
 //   - los óptimos exactos de instancia1 e instancia2 por enumeración completa;
 //   - que el ABC es puro: la población inicial son SN permutaciones aleatorias,
 //     sin ninguna heurística constructiva;
+//   - que limit y MCN se calculan solos con el número de trabajos n (SN × n y 250 + 25 × n);
 //   - que el ABC devuelve permutaciones válidas con su makespan correcto, que la
 //     curva de convergencia nunca sube y que la misma semilla da la misma corrida;
-//   - las estadísticas y los archivos CSV de resultados.
+//   - las estadísticas, los archivos CSV de resultados y que las gráficas SVG sirven
+//     para instancias de cualquier tamaño (ningún texto se sale de la imagen).
 // Se ejecuta desde la carpeta del proyecto (usa las rutas instancias/...).
 // Termina con código 0 si todas las pruebas pasan y con 1 si alguna falla.
 // =============================================================================
@@ -77,6 +80,81 @@ std::vector<int> desdeBaseUno(const std::vector<int>& numeros) {
 Instancia instanciaDesdeTexto(const std::string& texto) {
     std::istringstream flujo(texto);
     return leerInstanciaDesdeFlujo(flujo, "prueba.txt");
+}
+
+// Instancia de n trabajos y m máquinas con tiempos al azar en [1, maximo] (para probar tamaños grandes).
+Instancia instanciaAleatoria(int n, int m, std::uint32_t maximo, std::uint32_t semilla) {
+    Instancia instancia;
+    instancia.nombre = "aleatoria_" + std::to_string(n) + "x" + std::to_string(m) + ".txt";
+    instancia.trabajos = n;
+    instancia.maquinas = m;
+    std::mt19937 g(semilla);
+    instancia.p.assign(static_cast<std::size_t>(n), std::vector<long long>(static_cast<std::size_t>(m)));
+    for (std::vector<long long>& fila : instancia.p)
+        for (long long& tiempo : fila) tiempo = 1 + static_cast<long long>(enteroUniforme(g, maximo));
+    return instancia;
+}
+
+// Valor del atributo 'nombre' dentro de la etiqueta 'etiqueta' (por ejemplo, width="1400" -> "1400").
+std::string atributo(const std::string& etiqueta, const std::string& nombre) {
+    const std::string buscado = " " + nombre + "=\"";
+    const std::size_t inicio = etiqueta.find(buscado);
+    if (inicio == std::string::npos) return "";
+    const std::size_t desde = inicio + buscado.size();
+    return etiqueta.substr(desde, etiqueta.find('"', desde) - desde);
+}
+
+std::size_t caracteresVisiblesUtf8(const std::string& texto) {
+    std::size_t cantidad = 0;
+    for (const char caracter : texto)
+        if ((static_cast<unsigned char>(caracter) & 0xC0U) != 0x80U) ++cantidad;
+    return cantidad;
+}
+
+// Cuenta los <text> de un SVG que se salen de la imagen. El ancho de cada texto se estima como en
+// graficas.cpp (0,6 × tamaño de letra por carácter). Si anchoPanel > 0, la imagen tiene paneles lado a
+// lado y cada texto debe quedar dentro del panel donde está su punto de anclaje. Los textos girados
+// (rótulos verticales dentro de las barras y del eje) se omiten.
+int textosFueraDeLaImagen(const std::string& svg, double anchoPanel = 0.0) {
+    const std::size_t inicioSvg = svg.find("<svg ");
+    const std::string etiquetaSvg = svg.substr(inicioSvg, svg.find('>', inicioSvg) - inicioSvg);
+    const double ancho = std::stod(atributo(etiquetaSvg, "width"));
+    const double alto = std::stod(atributo(etiquetaSvg, "height"));
+    int fuera = 0;
+    for (std::size_t posicion = svg.find("<text "); posicion != std::string::npos; posicion = svg.find("<text ", posicion + 1)) {
+        const std::size_t cierre = svg.find('>', posicion);
+        const std::string etiqueta = svg.substr(posicion, cierre - posicion);
+        if (etiqueta.find("rotate(") != std::string::npos) continue;
+        const std::string contenido = svg.substr(cierre + 1, svg.find("</text>", cierre) - cierre - 1);
+        const double x = std::stod(atributo(etiqueta, "x"));
+        const double y = std::stod(atributo(etiqueta, "y"));
+        const double tamano = std::stod(atributo(etiqueta, "font-size"));
+        const double anchoTexto = 0.6 * tamano * static_cast<double>(caracteresVisiblesUtf8(contenido));
+        const std::string anclaje = atributo(etiqueta, "text-anchor");
+        const double izquierda = anclaje == "middle" ? x - anchoTexto / 2.0 : (anclaje == "end" ? x - anchoTexto : x);
+        double minimo = 0.0;
+        double maximo = ancho;
+        if (anchoPanel > 0.0) {
+            minimo = std::floor(x / anchoPanel) * anchoPanel;
+            maximo = minimo + anchoPanel;
+        }
+        if (izquierda < minimo - 0.5 || izquierda + anchoTexto > maximo + 0.5 || y - tamano < -0.5 || y > alto + 0.5) ++fuera;
+    }
+    return fuera;
+}
+
+// Texto completo del grupo <g id="secuencia"> de un Gantt (sus líneas unidas con un espacio).
+std::string secuenciaDelGantt(const std::string& svg) {
+    const std::size_t inicio = svg.find("<g id=\"secuencia\">");
+    if (inicio == std::string::npos) return "";
+    const std::size_t fin = svg.find("</g>", inicio);
+    std::string unido;
+    for (std::size_t posicion = svg.find("<text ", inicio); posicion != std::string::npos && posicion < fin;
+         posicion = svg.find("<text ", posicion + 1)) {
+        const std::size_t cierre = svg.find('>', posicion);
+        unido += (unido.empty() ? "" : " ") + svg.substr(cierre + 1, svg.find("</text>", cierre) - cierre - 1);
+    }
+    return unido;
 }
 
 // Óptimo exacto probando las n! permutaciones (solo para instancias pequeñas, n <= 10).
@@ -201,6 +279,29 @@ int main() {
                   lanza<std::runtime_error>([] { leerInstancia("instancias/no_existe.txt"); }),
               "X-06 lector: rechaza datos incompletos o de más, máquina repetida o fuera de rango, tiempo negativo\n"
               "        o no numérico, n = 0, archivo vacío y archivo inexistente");
+    {
+        // Formato de matriz simple (como la tabla del enunciado, §3.1): una fila por trabajo con sus m tiempos,
+        // sin números de máquina. Se distingue de los pares (máquina, tiempo) por la cantidad de números:
+        // n × m = matriz; 2 × n × m = pares. Si no es ninguna de las dos, el mensaje dice cuántos se esperaban.
+        const Instancia matriz = instanciaDesdeTexto("5 4\n5 8 6 7\n4 6 7 5\n9 5 8 6\n6 7 5 8\n7 4 6 9\n");
+        const Instancia matrizConDescripcion = instanciaDesdeTexto("Ejemplo del enunciado\r\n 5  4\r\n5 8 6 7\r\n4 6 7 5\r\n"
+                                                                   "9 5 8 6\r\n6 7 5 8\r\n7 4 6 9\r\n");
+        const Instancia unaMaquinaMatriz = instanciaDesdeTexto("3 1\n4\n7\n2\n");  // con m = 1 tampoco hay ambigüedad
+        std::string mensaje;
+        try {
+            instanciaDesdeTexto("2 3\n1 2 3\n4 5\n");
+        } catch (const std::runtime_error& error) {
+            mensaje = error.what();
+        }
+        comprobar(matriz.p == matrizEnunciado && matrizConDescripcion.p == matrizEnunciado &&
+                      calcularMakespan(matriz, desdeBaseUno({3, 1, 4, 2, 5})) == 57 &&
+                      unaMaquinaMatriz.p == std::vector<std::vector<long long>>({{4}, {7}, {2}}) &&
+                      mensaje.find("se esperaban 6") != std::string::npos && mensaje.find("12") != std::string::npos &&
+                      mensaje.find("se leyeron 5") != std::string::npos &&
+                      lanza<std::runtime_error>([] { instanciaDesdeTexto("2 2\n3 -4\n5 6\n"); }),
+                  "X-07 lector: también acepta la matriz de tiempos sin números de máquina (tabla del enunciado:\n"
+                  "        [J3, J1, J4, J2, J5] = 57); si faltan o sobran números dice cuántos esperaba");
+    }
 
     // ------------------------------------------------------------------------------------------
     std::cout << "\n--- Makespan, tabla C y Gantt (enunciado §3.3 y §5.4) ---\n";
@@ -238,7 +339,7 @@ int main() {
             }
             restricciones = restricciones && operaciones.back().fin == calcularMakespan(*instancia, secuencia);
         }
-        comprobar(restricciones, "X-07 cronograma: cada operación dura p, empieza cuando la máquina está libre y el trabajo\n"
+        comprobar(restricciones, "X-08 cronograma: cada operación dura p, empieza cuando la máquina está libre y el trabajo\n"
                                  "        terminó en la máquina anterior; la última termina en el makespan");
     }
 
@@ -293,7 +394,7 @@ int main() {
             for (int j = 0; j < 6; ++j)
                 if (i != j) parejo = parejo && conteoPares[static_cast<std::size_t>(i * 6 + j)] > 1000 &&
                                      conteoPares[static_cast<std::size_t>(i * 6 + j)] < 1400;
-        comprobar(distintasYEnRango && parejo, "X-08 dosPosicionesDistintas: siempre i != j y los 30 pares (i, j) salen parejo");
+        comprobar(distintasYEnRango && parejo, "X-09 dosPosicionesDistintas: siempre i != j y los 30 pares (i, j) salen parejo");
         bool siemprePermutacion = true;
         int sinCambio = 0;
         std::vector<int> actual = permutacionAleatoria(12, g);
@@ -306,7 +407,7 @@ int main() {
         std::vector<int> dos = {0, 1};
         aplicarOperadorAleatorio(dos, g);
         comprobar(siemprePermutacion && sinCambio == 0 && dos == std::vector<int>({1, 0}),
-                  "X-09 aplicarOperadorAleatorio: 20 000 vecinos seguidos son permutaciones válidas y distintas de su origen;\n"
+                  "X-10 aplicarOperadorAleatorio: 20 000 vecinos seguidos son permutaciones válidas y distintas de su origen;\n"
                   "        con n = 2 el único vecino es el intercambio");
     }
 
@@ -321,7 +422,7 @@ int main() {
 
     // ------------------------------------------------------------------------------------------
     std::cout << "\n--- Algoritmo ABC ---\n";
-    const ParametrosABC parametros;  // configuración por defecto (SN = 20, límite = SN × n, MCN = 300)
+    const ParametrosABC parametros;  // configuración por defecto (SN = 20, límite = SN × n, MCN = 250 + 25 × n)
     {
         // ABC puro (Karaboga y Basturk, 2007): las SN fuentes del ciclo 0 son permutaciones aleatorias,
         // sin ninguna heurística constructiva. Con 0 ciclos, el resultado tiene que ser exactamente la
@@ -347,7 +448,7 @@ int main() {
                                  r.convergencia.size() == 1 && r.evaluaciones == sinCiclos.fuentes && r.cicloMejor == 0;
             }
         }
-        comprobar(soloAleatorias, "X-10 ABC puro: con 0 ciclos, el mejor es la mejor de las 20 permutaciones aleatorias iniciales\n"
+        comprobar(soloAleatorias, "X-11 ABC puro: con 0 ciclos, el mejor es la mejor de las 20 permutaciones aleatorias iniciales\n"
                                   "        (ninguna heurística constructiva) en las 30 semillas de las 3 instancias");
     }
     {
@@ -358,13 +459,14 @@ int main() {
         comprobar(primera.mejorSecuencia == segunda.mejorSecuencia && primera.mejorCmax == segunda.mejorCmax &&
                       primera.convergencia == segunda.convergencia && primera.evaluaciones == segunda.evaluaciones &&
                       tercera.convergencia == primera.convergencia && tercera.mejorSecuencia == primera.mejorSecuencia,
-                  "X-11 reproducibilidad: la misma semilla da exactamente la misma corrida (secuencia, curva y evaluaciones)");
+                  "X-12 reproducibilidad: la misma semilla da exactamente la misma corrida (secuencia, curva y evaluaciones)");
     }
     {
         Instancia unTrabajo = instanciaDesdeTexto("1 3\n0 4 1 5 2 6\n");
         const ResultadoCorrida r = ColoniaABC(unTrabajo, parametros, 1u).ejecutar();
-        comprobar(r.mejorCmax == 15 && r.mejorSecuencia == std::vector<int>({0}) && r.convergencia.size() == 301,
-                  "X-12 caso borde: con 1 trabajo el resultado es esa única secuencia (Cmax 15) y la curva tiene 301 puntos");
+        comprobar(r.mejorCmax == 15 && r.mejorSecuencia == std::vector<int>({0}) && r.convergencia.size() == 276,
+                  "X-13 caso borde: con 1 trabajo el resultado es esa única secuencia (Cmax 15) y la curva tiene\n"
+                  "        276 puntos (MCN = 250 + 25 × 1 = 275)");
         comprobar(lanza<std::invalid_argument>([&] {
                       ParametrosABC malo;
                       malo.fuentes = 0;
@@ -374,7 +476,7 @@ int main() {
                       malo.limite = 0;
                       ColoniaABC(bas1, malo, 1u);
                   }),
-                  "X-13 parámetros inválidos (SN = 0 o límite = 0) se rechazan con un mensaje");
+                  "X-14 parámetros inválidos (SN = 0 o límite = 0) se rechazan con un mensaje");
     }
     {
         // Otras combinaciones de los parámetros: todas deben dar resultados válidos.
@@ -391,7 +493,7 @@ int main() {
                                calcularMakespan(car5, r.mejorSecuencia) == r.mejorCmax && r.mejorCmax >= 7720 &&
                                std::is_sorted(r.convergencia.rbegin(), r.convergencia.rend());
         }
-        comprobar(variantesValidas, "X-14 otros parámetros (límite fijo = 50; SN = 1 con límite = 1): resultados válidos");
+        comprobar(variantesValidas, "X-15 otros parámetros (límite fijo = 50; SN = 1 con límite = 1): resultados válidos");
     }
     {
         // Regla del contador de intentos ("trial") del ABC original (Karaboga y Basturk, 2007): solo una
@@ -406,7 +508,7 @@ int main() {
         empates.ciclos = 30;
         const ResultadoCorrida r = ColoniaABC(unaMaquina, empates, 5u).ejecutar();
         comprobar(r.mejorCmax == 17 && r.abandonos == 15 && r.evaluaciones == 1 + 30 * 2 + 15,
-                  "X-15 contador del ABC original: con 1 máquina todo vecino empata; cada empate cuenta como intento\n"
+                  "X-16 contador del ABC original: con 1 máquina todo vecino empata; cada empate cuenta como intento\n"
                   "        sin mejora y, con SN = 1 y límite = 3, actúa una exploradora cada 2 ciclos (15 en 30 ciclos)");
     }
     {
@@ -423,8 +525,26 @@ int main() {
         comprobar(!parametros.limite.has_value() && limiteEfectivo(parametros, 5) == 100 && limiteEfectivo(parametros, 10) == 200 &&
                       limiteEfectivo(parametros, 12) == 240 && limiteEfectivo(fijo, 12) == 50 && r.mejorCmax == 22 &&
                       r.abandonos == 10 && r.evaluaciones == 1 + 30 * 2 + 10,
-                  "X-16 límite por defecto = SN × n (Karaboga y Akay, 2009): 100 / 200 / 240 en las 3 instancias;\n"
+                  "X-17 límite por defecto = SN × n (Karaboga y Akay, 2009): 100 / 200 / 240 en las 3 instancias;\n"
                   "        con 1 máquina, SN = 1 y n = 6 (límite 6), actúa una exploradora cada 3 ciclos (10 en 30 ciclos)");
+    }
+    {
+        // MCN por defecto = 250 + 25 × n: la recta que pasa por los MCN que usaron Karaboga y Basturk (2007)
+        // con D = 10, 20 y 30 variables (500, 750 y 1000 ciclos), con D = n trabajos en el PFSP. Con
+        // limit = SN × n y unos 2 intentos por fuente en cada ciclo, una fuente necesita unos SN × n / 2 ciclos
+        // sin mejorar para que la abandone una exploradora: con un MCN fijo de 300, desde n = 30 no alcanzaba.
+        ParametrosABC fijo;
+        fijo.ciclos = 300;
+        const ResultadoCorrida r = ColoniaABC(bas1, parametros, 12345u).ejecutar();
+        comprobar(!parametros.ciclos.has_value() && ciclosEfectivos(parametros, 5) == 375 &&
+                      ciclosEfectivos(parametros, 10) == 500 && ciclosEfectivos(parametros, 12) == 550 &&
+                      ciclosEfectivos(parametros, 30) == 1000 && ciclosEfectivos(fijo, 12) == 300 &&
+                      r.convergencia.size() == 376 &&
+                      textoParametros(parametros, 12) == "SN = 20, límite = 240 (= SN × n), MCN = 550 (= 250 + 25 × n)" &&
+                      textoParametros(fijo, 12) == "SN = 20, límite = 240 (= SN × n), MCN = 300" &&
+                      textoParametros(parametros, 0) == "SN = 20, límite = SN × n, MCN = 250 + 25 × n",
+                  "X-18 MCN por defecto = 250 + 25 × n (Karaboga y Basturk, 2007: 500 / 750 / 1000 ciclos con\n"
+                  "        D = 10 / 20 / 30): 375 / 500 / 550 en las 3 instancias y 1000 con 30 trabajos; --ciclos lo fija");
     }
 
     // B-15..B-17: 30 corridas con la configuración por defecto en cada instancia.
@@ -441,7 +561,7 @@ int main() {
             const std::size_t ciclo = static_cast<std::size_t>(r.cicloMejor);
             coherentes = coherentes && esPermutacionValida(r.mejorSecuencia, instancia.trabajos) &&
                          calcularMakespan(instancia, r.mejorSecuencia) == r.mejorCmax && r.mejorCmax >= referencia &&
-                         r.convergencia.size() == static_cast<std::size_t>(parametros.ciclos + 1) &&
+                         r.convergencia.size() == static_cast<std::size_t>(ciclosEfectivos(parametros, instancia.trabajos) + 1) &&
                          std::is_sorted(r.convergencia.rbegin(), r.convergencia.rend()) && r.convergencia.back() == r.mejorCmax &&
                          r.convergencia[ciclo] == r.mejorCmax && (ciclo == 0 || r.convergencia[ciclo - 1] > r.mejorCmax) &&
                          !r.historial.empty() && r.historial.back().cmax == r.mejorCmax;
@@ -472,9 +592,9 @@ int main() {
         comprobar(r.mejor == 10 && r.peor == 16 && r.promedio == 13.0 && std::abs(r.desviacion - 2.5819889) < 1e-6 &&
                       r.tiempoPromedioMs == 3.0 && r.indiceMejor == 0 && r.exitos == 1 && r.bre == 0.0 &&
                       std::abs(r.are - 30.0) < 1e-9 && std::abs(r.wre - 60.0) < 1e-9,
-                  "X-17 resumen de {10, 12, 14, 16}: mejor 10, peor 16, promedio 13, desv. muestral 2,582, ARE 30 %, WRE 60 %");
+                  "X-19 resumen de {10, 12, 14, 16}: mejor 10, peor 16, promedio 13, desv. muestral 2,582, ARE 30 %, WRE 60 %");
         comprobar(mediana({3.0, 1.0, 2.0}) == 2.0 && mediana({4.0, 1.0, 3.0, 2.0}) == 2.5,
-                  "X-18 mediana de {3, 1, 2} = 2 y de {4, 1, 3, 2} = 2,5");
+                  "X-20 mediana de {3, 1, 2} = 2 y de {4, 1, 3, 2} = 2,5");
     }
 
     // ------------------------------------------------------------------------------------------
@@ -485,8 +605,9 @@ int main() {
         comprobar(c.rutasInstancias == std::vector<std::string>({"a.txt"}) && c.parametros.fuentes == 10 &&
                       c.parametros.limite == 25 && c.parametros.ciclos == 600 && c.corridas == 12 && c.semillaBase == 1000 &&
                       c.referencias == std::vector<long long>({7720}) && c.carpetaSalida == "res" &&
-                      !leerArgumentos({"a.txt"}).parametros.limite.has_value(),
-                  "X-19 se leen todas las opciones de la línea de comandos; sin --limite, el límite es automático");
+                      !leerArgumentos({"a.txt"}).parametros.limite.has_value() &&
+                      !leerArgumentos({"a.txt"}).parametros.ciclos.has_value(),
+                  "X-21 se leen todas las opciones de la línea de comandos; sin --limite ni --ciclos, los dos son automáticos");
         comprobar(lanza<std::invalid_argument>([] { leerArgumentos({"a.txt", "--fuentes", "0"}); }) &&
                       lanza<std::invalid_argument>([] { leerArgumentos({"a.txt", "--ciclos", "diez"}); }) &&
                       lanza<std::invalid_argument>([] { leerArgumentos({"a.txt", "--corridas"}); }) &&
@@ -496,9 +617,10 @@ int main() {
                       lanza<std::invalid_argument>([] { leerArgumentos({"a.txt", "--observadora", "voraz"}); }) &&
                       lanza<std::invalid_argument>([] { leerArgumentos({"a.txt", "--limite", "0"}); }) &&
                       lanza<std::invalid_argument>([] { validarConfiguracion(leerArgumentos({"a.txt", "b.txt", "--referencia", "5"})); }) &&
-                      lanza<std::invalid_argument>([] { validarConfiguracion(leerArgumentos({"x/a.txt", "y/a.txt"})); }),
-                  "X-20 se rechazan valores fuera de rango, no numéricos o faltantes, opciones desconocidas y\n"
-                  "        referencias que no coinciden con las instancias");
+                      lanza<std::invalid_argument>([] { validarConfiguracion(leerArgumentos({"x/a.txt", "y/a.txt"})); }) &&
+                      lanza<std::invalid_argument>([] { validarTamanoConvergencia(leerArgumentos({"a.txt", "--corridas", "100000"}), 5000); }),
+                  "X-22 se rechazan valores fuera de rango, no numéricos o faltantes, opciones desconocidas,\n"
+                  "        referencias que no coinciden con las instancias y curvas de convergencia demasiado grandes");
         comprobar(interpretarSecuencia("J3 J1 J4 J2 J5", 5) == desdeBaseUno({3, 1, 4, 2, 5}) &&
                       interpretarSecuencia("[J3, J1, J4, J2, J5]", 5) == desdeBaseUno({3, 1, 4, 2, 5}) &&
                       interpretarSecuencia("3,1,4,2,5", 5) == desdeBaseUno({3, 1, 4, 2, 5}) &&
@@ -507,7 +629,7 @@ int main() {
                       lanza<std::invalid_argument>([] { interpretarSecuencia("J1 J1 J2 J3 J4", 5); }) &&
                       lanza<std::invalid_argument>([] { interpretarSecuencia("J1 J2 J3", 5); }) &&
                       lanza<std::invalid_argument>([] { interpretarSecuencia("J1 J2 J3 J4 J6", 5); }),
-                  "X-21 --evaluar acepta \"J3 J1 J4 J2 J5\" (con o sin comillas), \"[J3, J1, ...]\" y \"3,1,4,2,5\";\n"
+                  "X-23 --evaluar acepta \"J3 J1 J4 J2 J5\" (con o sin comillas), \"[J3, J1, ...]\" y \"3,1,4,2,5\";\n"
                   "        rechaza trabajos repetidos, faltantes y fuera de rango");
     }
 
@@ -528,30 +650,30 @@ int main() {
             filasCorridas[0] == "instancia,corrida,semilla,fuentes,limite,ciclos,cmax,tiempo_ms,ciclo_mejor,evaluaciones,abandonos,secuencia";
         for (std::size_t k = 1; k < filasCorridas.size() && corridasCoherentes; ++k) {
             const std::vector<std::string> campos = camposCsv(filasCorridas[k]);
-            corridasCoherentes = campos.size() == 12 && campos[4] == "240" &&
+            corridasCoherentes = campos.size() == 12 && campos[4] == "240" && campos[5] == "550" &&
                                  std::stoll(campos[6]) == calcularMakespan(car3, secuenciaDesdeTexto(campos[11])) &&
                                  std::stoul(campos[2]) == semillaDeCorrida(12345u, static_cast<int>(k));
         }
-        comprobar(corridasCoherentes, "X-22 _corridas.csv: 12 columnas y 30 filas, límite = 240 (SN × n); el cmax de cada una es\n"
-                                      "        el makespan recalculado de su secuencia");
+        comprobar(corridasCoherentes, "X-24 _corridas.csv: 12 columnas y 30 filas, límite = 240 (SN × n) y MCN = 550 (250 + 25 × n);\n"
+                                      "        el cmax de cada una es el makespan recalculado de su secuencia");
 
         const std::vector<std::string> filasConvergencia = lineas(leerArchivo(rutas[1]));
-        comprobar(filasConvergencia.size() == 1 + 30 * 301 && filasConvergencia[0] == "corrida,ciclo,mejor_cmax",
-                  "X-23 _convergencia.csv: 30 x 301 filas (ciclos 0..300 de cada corrida)");
+        comprobar(filasConvergencia.size() == 1 + 30 * 551 && filasConvergencia[0] == "corrida,ciclo,mejor_cmax",
+                  "X-25 _convergencia.csv: 30 x 551 filas (ciclos 0..550 de cada corrida)");
 
         const std::vector<std::string> filasGantt = lineas(leerArchivo(rutas[2]));
         long long finMaximo = 0;
         for (std::size_t k = 1; k < filasGantt.size(); ++k) finMaximo = std::max(finMaximo, std::stoll(camposCsv(filasGantt[k])[3]));
         comprobar(filasGantt.size() == 1 + 12 * 5 && finMaximo == experimento.resumen.mejor,
-                  "X-24 _gantt.csv: 60 operaciones (12 x 5) y el mayor fin es el mejor makespan");
+                  "X-26 _gantt.csv: 60 operaciones (12 x 5) y el mayor fin es el mejor makespan");
 
         const std::vector<std::string> filasResumen = lineas(leerArchivo(rutas[3]));
         const std::vector<std::string> campos = filasResumen.size() == 2 ? camposCsv(filasResumen[1]) : std::vector<std::string>();
         comprobar(campos.size() == 24 && filasResumen[0].find("neh") == std::string::npos &&
                       filasResumen[0].find("contador") == std::string::npos && filasResumen[0].find("observadora") == std::string::npos &&
-                      campos[0] == "instancia3_car3.txt" && campos[1] == "30" && campos[14] == "240" &&
+                      campos[0] == "instancia3_car3.txt" && campos[1] == "30" && campos[14] == "240" && campos[15] == "550" &&
                       std::stoll(campos[2]) == experimento.resumen.mejor && std::stoll(campos[3]) == experimento.resumen.peor,
-                  "X-25 _resumen.csv: 1 fila con las 24 columnas (límite = 240), mejor y peor coinciden con el resumen");
+                  "X-27 _resumen.csv: 1 fila con las 24 columnas (límite = 240 y MCN = 550); mejor y peor coinciden con el resumen");
 
         const std::string svgCurva = svgConvergencia(experimento);
         const std::string svgDiagrama = svgGantt(car3, experimento.resultados[experimento.resumen.indiceMejor].mejorSecuencia, "");
@@ -560,9 +682,34 @@ int main() {
                       svgCurva.find("Número de iteraciones") != std::string::npos &&
                       svgDiagrama.find("Makespan = " + std::to_string(experimento.resumen.mejor)) != std::string::npos &&
                       svgDiagrama.find("</svg>") != std::string::npos,
-                  "X-26 SVG: la curva tiene título y ejes (iteraciones / mejor makespan); el Gantt muestra el makespan");
+                  "X-28 SVG: la curva tiene título y ejes (iteraciones / mejor makespan); el Gantt muestra el makespan");
+        {
+            // Las gráficas tienen que servir para cualquier instancia: ningún texto se sale de la imagen
+            // (ni del panel, en la figura de varias instancias) y el Gantt muestra la secuencia completa,
+            // repartida en varias líneas si es larga. Se prueban tamaños como los de OR-Library (hasta
+            // 100 × 10 y 75 × 20), 20 trabajos con 30 máquinas y tiempos de 9 cifras.
+            bool ganttsBien = textosFueraDeLaImagen(svgDiagrama) == 0;
+            const std::vector<Instancia> grandes = {instanciaAleatoria(75, 20, 99, 1u), instanciaAleatoria(100, 10, 99, 2u),
+                                                    instanciaAleatoria(20, 30, 99, 3u), instanciaAleatoria(12, 5, 999999999u, 4u)};
+            for (const Instancia& grande : grandes) {
+                std::mt19937 g(5u);
+                const std::vector<int> secuenciaGrande = permutacionAleatoria(grande.trabajos, g);
+                const std::string subtitulo = "Mejor solución de 30 corridas del ABC (corrida 25, semilla 12369; " +
+                                              textoParametros(ParametrosABC(), grande.trabajos) + ")";
+                const std::string svg = svgGantt(grande, secuenciaGrande, subtitulo);
+                ganttsBien = ganttsBien && textosFueraDeLaImagen(svg) == 0 &&
+                             secuenciaDelGantt(svg) == "Secuencia (igual en todas las máquinas): " + textoSecuencia(secuenciaGrande);
+            }
+            comprobar(ganttsBien && secuenciaDelGantt(svgDiagrama) ==
+                                        "Secuencia (igual en todas las máquinas): " +
+                                            textoSecuencia(experimento.resultados[experimento.resumen.indiceMejor].mejorSecuencia),
+                      "X-29 Gantt de cualquier tamaño (car3, 75 x 20, 100 x 10, 20 x 30 y tiempos de 9 cifras): ningún\n"
+                      "        texto se sale de la imagen y la secuencia aparece completa");
+            comprobar(textosFueraDeLaImagen(svgCurva) == 0 && textosFueraDeLaImagen(svgConvergenciaPaneles(experimentos), 640.0) == 0,
+                      "X-30 curvas de convergencia: ningún texto se sale de la imagen ni de su panel");
+        }
         comprobar(std::filesystem::exists(rutaDesdeUtf8(rutas[0])) && rutas[0].find("ñandú") != std::string::npos,
-                  "X-27 los archivos se escriben también en carpetas con tildes y ñ (abc_pfsp_pruebas_ñandú)");
+                  "X-31 los archivos se escriben también en carpetas con tildes y ñ (abc_pfsp_pruebas_ñandú)");
         std::filesystem::remove_all(carpetaTemporal);
     }
 

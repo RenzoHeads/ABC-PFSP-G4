@@ -113,11 +113,6 @@ void validarConfiguracion(const Configuracion& configuracion) {
         throw std::invalid_argument("--referencia trae " + std::to_string(configuracion.referencias.size()) +
                                     " valor(es), pero hay " + std::to_string(configuracion.rutasInstancias.size()) +
                                     " instancia(s): debe haber uno por instancia, en el mismo orden.");
-    const long long datos = (static_cast<long long>(configuracion.parametros.ciclos) + 1) * configuracion.corridas;
-    if (datos > MAXIMO_DATOS_CONVERGENCIA)
-        throw std::invalid_argument("(ciclos + 1) x corridas = " + std::to_string(datos) +
-                                    " supera el máximo de " + std::to_string(MAXIMO_DATOS_CONVERGENCIA) +
-                                    " valores de convergencia. Reduzca --ciclos o --corridas.");
     // Dos archivos con el mismo nombre escribirían los mismos archivos de resultados.
     std::set<std::string> nombres;
     for (const std::string& ruta : configuracion.rutasInstancias) {
@@ -125,6 +120,14 @@ void validarConfiguracion(const Configuracion& configuracion) {
         if (!nombres.insert(nombre).second)
             throw std::invalid_argument("La instancia '" + nombre + "' aparece dos veces: sus resultados se sobrescribirían.");
     }
+}
+
+void validarTamanoConvergencia(const Configuracion& configuracion, int ciclos) {
+    const long long datos = (static_cast<long long>(ciclos) + 1) * configuracion.corridas;
+    if (datos > MAXIMO_DATOS_CONVERGENCIA)
+        throw std::invalid_argument("(MCN + 1) x corridas = " + std::to_string(datos) + " (MCN = " + std::to_string(ciclos) +
+                                    ") supera el máximo de " + std::to_string(MAXIMO_DATOS_CONVERGENCIA) +
+                                    " valores de convergencia. Reduzca --ciclos o --corridas.");
 }
 
 std::vector<int> interpretarSecuencia(const std::string& texto, int trabajos) {
@@ -163,7 +166,9 @@ std::string textoAyuda() {
         "  --fuentes N          SN: fuentes de alimento = abejas empleadas = observadoras  [20]\n"
         "  --limite N           intentos sin mejora antes de abandonar una fuente          [SN × n]\n"
         "                       (por defecto, SN × número de trabajos: Karaboga y Akay, 2009)\n"
-        "  --ciclos N           MCN: número de iteraciones (criterio de parada)            [300]\n"
+        "  --ciclos N           MCN: número de iteraciones (criterio de parada)            [250 + 25 × n]\n"
+        "                       (por defecto crece con el número de trabajos n, como en Karaboga\n"
+        "                       y Basturk, 2007: 500, 750 y 1000 ciclos para 10, 20 y 30 variables)\n"
         "  --corridas N         corridas independientes por instancia                      [30]\n"
         "  --semilla N          semilla base: la corrida k usa la semilla N + k - 1        [12345]\n"
         "  --referencia C[,C]   makespan de referencia (mejor conocido) de cada instancia, en el\n"

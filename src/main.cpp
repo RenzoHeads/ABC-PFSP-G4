@@ -88,9 +88,12 @@ int ejecutar(const std::vector<std::string>& argumentos) {
     }
 
     // 1) Cargar TODAS las instancias antes de empezar, para avisar enseguida si un archivo tiene errores.
+    //    Con el archivo leído ya se conoce n, y con él el MCN automático: se comprueba que la curva de
+    //    convergencia quepa en memoria antes de ejecutar nada.
     std::vector<Instancia> instancias;
     for (const std::string& ruta : configuracion.rutasInstancias) {
         instancias.push_back(leerInstancia(ruta));
+        validarTamanoConvergencia(configuracion, ciclosEfectivos(configuracion.parametros, instancias.back().trabajos));
         std::cout << "Archivo cargado: " << ruta << "\n";
     }
     crearCarpeta(configuracion.carpetaSalida);

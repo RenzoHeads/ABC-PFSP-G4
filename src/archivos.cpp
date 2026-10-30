@@ -61,12 +61,13 @@ std::vector<std::string> camposResumen(const Experimento& experimento) {
     const ParametrosABC& parametros = experimento.parametros;
     const ResultadoCorrida& corridaMejor = experimento.resultados[resumen.indiceMejor];
     const int limite = limiteEfectivo(parametros, experimento.instancia.trabajos);
+    const int ciclos = ciclosEfectivos(parametros, experimento.instancia.trabajos);
     std::vector<std::string> campos = {
         experimento.instancia.nombre, texto(resumen.corridas), texto(resumen.mejor), texto(resumen.peor),
         formatoDecimal(resumen.promedio, 4), formatoDecimal(resumen.desviacion, 4), formatoDecimal(resumen.tiempoPromedioMs, 4),
         textoSecuencia(corridaMejor.mejorSecuencia), texto(experimento.instancia.trabajos), texto(experimento.instancia.maquinas),
         texto(experimento.semillaBase), texto(static_cast<long long>(resumen.indiceMejor) + 1), texto(corridaMejor.semilla),
-        texto(parametros.fuentes), texto(limite), texto(parametros.ciclos), formatoDecimal(resumen.evaluacionesPromedio, 2),
+        texto(parametros.fuentes), texto(limite), texto(ciclos), formatoDecimal(resumen.evaluacionesPromedio, 2),
         formatoDecimal(resumen.cicloMejorPromedio, 2), formatoDecimal(resumen.abandonosPromedio, 2)};
     if (resumen.referencia > 0) {
         for (const std::string& valor : {texto(resumen.referencia), texto(resumen.exitos), formatoDecimal(resumen.bre, 4),
@@ -106,6 +107,7 @@ std::vector<std::string> escribirCsvExperimento(const Experimento& experimento, 
     const ParametrosABC& parametros = experimento.parametros;
     const std::string prefijo = nombreSinExtension(instancia);
     const int limite = limiteEfectivo(parametros, instancia.trabajos);
+    const int ciclos = ciclosEfectivos(parametros, instancia.trabajos);
     std::vector<std::string> rutas;
 
     // 1) Una fila por corrida (enunciado §5.1: secuencia, makespan, tiempo, iteraciones y parámetros).
@@ -114,7 +116,7 @@ std::vector<std::string> escribirCsvExperimento(const Experimento& experimento, 
     for (std::size_t k = 0; k < experimento.resultados.size(); ++k) {
         const ResultadoCorrida& corrida = experimento.resultados[k];
         corridas += filaCsv({instancia.nombre, texto(static_cast<long long>(k) + 1), texto(corrida.semilla),
-                             texto(parametros.fuentes), texto(limite), texto(parametros.ciclos),
+                             texto(parametros.fuentes), texto(limite), texto(ciclos),
                              texto(corrida.mejorCmax), formatoDecimal(corrida.tiempoMs, 4),
                              texto(corrida.cicloMejor), texto(corrida.evaluaciones), texto(corrida.abandonos),
                              textoSecuencia(corrida.mejorSecuencia)});

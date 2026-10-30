@@ -14,8 +14,12 @@
 //                            'limite' intentos) por una permutación aleatoria.
 //   - Ciclo (iteración)    = empleadas + observadoras + exploradora.
 //   - Criterio de parada   = número máximo de ciclos (MCN).
-// Parámetros (los tres del ABC básico): SN, limit y MCN. Por defecto,
-// limit = SN × D (Karaboga y Akay, 2009), con D = n trabajos en el PFSP.
+// Parámetros (los tres del ABC básico): SN, limit y MCN. Por defecto, limit y MCN
+// se calculan con la dimensión del problema D (en el PFSP, D = n trabajos):
+//   limit = SN × D      (Karaboga y Akay, 2009)
+//   MCN   = 250 + 25·D  (la recta de los MCN de Karaboga y Basturk, 2007:
+//                        500, 750 y 1000 ciclos para D = 10, 20 y 30)
+// Así el programa sirve para cualquier instancia sin ajustar nada a mano.
 // =============================================================================
 #ifndef ABC_PFSP_ABC_HPP
 #define ABC_PFSP_ABC_HPP
@@ -38,13 +42,21 @@ struct ParametrosABC {
     int fuentes = 20;           // SN: fuentes de alimento (= abejas empleadas = abejas observadoras)
     std::optional<int> limite;  // limit: intentos sin mejora antes de abandonar una fuente.
                                 // Sin valor = automático: SN × n (ver limiteEfectivo)
-    int ciclos = 300;           // MCN: número de ciclos (iteraciones); es el criterio de parada
+    std::optional<int> ciclos;  // MCN: número de ciclos (iteraciones); es el criterio de parada.
+                                // Sin valor = automático: 250 + 25 × n (ver ciclosEfectivos)
 };
 
 // El limit que usa la colonia en una instancia de 'trabajos' trabajos: el indicado con --limite o,
 // si no se indicó, limit = SN × D (Karaboga y Akay, 2009), donde D es la dimensión del problema.
 // En el PFSP una solución es una permutación de n trabajos, así que D = n.
 int limiteEfectivo(const ParametrosABC& parametros, int trabajos);
+
+// El MCN que usa la colonia en una instancia de 'trabajos' trabajos: el indicado con --ciclos o, si no
+// se indicó, MCN = 250 + 25 × D. Es la recta que pasa por los MCN de Karaboga y Basturk (2007): 500,
+// 750 y 1000 ciclos para D = 10, 20 y 30. Con limit = SN × D, una fuente estancada necesita unos
+// SN × D / 2 ciclos para agotarse; con un MCN fijo (por ejemplo, 300), desde unos 30 trabajos las
+// exploradoras ya no alcanzaban a actuar. Escalar MCN con D evita ajustarlo a mano en cada instancia.
+int ciclosEfectivos(const ParametrosABC& parametros, int trabajos);
 
 // Una mejora del mejor makespan global (sirve para contar cómo avanzó la búsqueda).
 struct Mejora {
@@ -71,7 +83,11 @@ std::string textoFase(Fase fase);  // "inicialización" | "empleadas" | ...
 // Límite para mostrar: "240 (= SN × n)" si es automático; "50" si se fijó con --limite.
 // Con trabajos = 0 (sin una instancia concreta) el automático se muestra como "SN × n".
 std::string textoLimite(const ParametrosABC& parametros, int trabajos);
-// "SN = 20, límite = 240 (= SN × n), MCN = 300" (trabajos = 0: "límite = SN × n")
+// MCN para mostrar: "550 (= 250 + 25 × n)" si es automático; "300" si se fijó con --ciclos.
+// Con trabajos = 0 el automático se muestra como "250 + 25 × n".
+std::string textoCiclos(const ParametrosABC& parametros, int trabajos);
+// "SN = 20, límite = 240 (= SN × n), MCN = 550 (= 250 + 25 × n)"
+// (trabajos = 0: "SN = 20, límite = SN × n, MCN = 250 + 25 × n")
 std::string textoParametros(const ParametrosABC& parametros, int trabajos);
 
 // Una colonia de abejas para UNA instancia, UNOS parámetros y UNA semilla.
@@ -99,6 +115,7 @@ private:
     const Instancia& instancia_;
     ParametrosABC parametros_;
     int limite_;  // limit efectivo para esta instancia (ver limiteEfectivo)
+    int ciclos_;  // MCN efectivo para esta instancia (ver ciclosEfectivos)
     std::uint32_t semilla_;
     std::mt19937 generador_;
     std::vector<std::vector<int>> fuentes_;  // fuentes_[i]: secuencia de la fuente i

@@ -58,6 +58,50 @@ double anchoTexto(const std::string& texto, double tamanoLetra) {
     return 0.6 * tamanoLetra * static_cast<double>(caracteresVisibles(texto));
 }
 
+// Parte un texto en líneas que caben en 'anchoMaximo' píxeles con letra de 'tamanoLetra'. Corta en los
+// espacios; una palabra que sola no cabe (por ejemplo, un nombre de archivo muy largo) se corta por
+// caracteres. Así ningún título ni secuencia larga (por ejemplo, de 100 trabajos) se sale de la imagen.
+std::vector<std::string> partirEnLineas(const std::string& texto, double anchoMaximo, double tamanoLetra) {
+    const std::size_t maximo = std::max<std::size_t>(1, static_cast<std::size_t>(anchoMaximo / (0.6 * tamanoLetra)));
+    std::vector<std::string> palabras;
+    std::istringstream flujo(texto);
+    for (std::string palabra; flujo >> palabra;) {
+        while (caracteresVisibles(palabra) > maximo) {
+            std::size_t corte = 0;  // byte donde empieza el carácter número maximo + 1
+            for (std::size_t vistos = 0; corte < palabra.size(); ++corte) {
+                if ((static_cast<unsigned char>(palabra[corte]) & 0xC0U) == 0x80U) continue;  // byte de continuación
+                if (vistos == maximo) break;
+                ++vistos;
+            }
+            palabras.push_back(palabra.substr(0, corte));
+            palabra.erase(0, corte);
+        }
+        palabras.push_back(palabra);
+    }
+    std::vector<std::string> lineas;
+    for (const std::string& palabra : palabras) {
+        if (!lineas.empty() && caracteresVisibles(lineas.back()) + 1 + caracteresVisibles(palabra) <= maximo)
+            lineas.back() += " " + palabra;
+        else
+            lineas.push_back(palabra);
+    }
+    if (lineas.empty()) lineas.push_back("");
+    return lineas;
+}
+
+// Como partirEnLineas, pero si el texto completo no cabe en una línea prefiere cortar entre los
+// segmentos (por ejemplo, entre los parámetros y las semillas) antes que en medio de uno.
+std::vector<std::string> lineasDeSegmentos(const std::vector<std::string>& segmentos, const std::string& separador,
+                                           double anchoMaximo, double tamanoLetra) {
+    std::string completo;
+    for (std::size_t k = 0; k < segmentos.size(); ++k) completo += (k > 0 ? separador : "") + segmentos[k];
+    if (anchoTexto(completo, tamanoLetra) <= anchoMaximo) return {completo};
+    std::vector<std::string> lineas;
+    for (const std::string& segmento : segmentos)
+        for (const std::string& linea : partirEnLineas(segmento, anchoMaximo, tamanoLetra)) lineas.push_back(linea);
+    return lineas;
+}
+
 void texto(std::ostringstream& svg, double x, double y, const std::string& contenido, double tamano,
            const std::string& anclaje = "start", const std::string& extra = "") {
     svg << "<text x=\"" << coordenada(x) << "\" y=\"" << coordenada(y) << "\" font-size=\"" << coordenada(tamano)
@@ -146,13 +190,31 @@ std::vector<std::pair<double, double>> puntosEscalonados(const std::vector<doubl
 void panelConvergencia(std::ostringstream& svg, const Experimento& experimento, double x0, double y0, double ancho,
                        double alto) {
     const std::vector<ResultadoCorrida>& resultados = experimento.resultados;
-    const int ciclos = experimento.parametros.ciclos;
+    const int ciclos = ciclosEfectivos(experimento.parametros, experimento.instancia.trabajos);
     const long long referencia = experimento.resumen.referencia;
+    const Instancia& instancia = experimento.instancia;
+    const ParametrosABC& parametros = experimento.parametros;
+
+    // Títulos: se parten en varias líneas si no caben en el ancho del panel (el área del gráfico baja lo
+    // necesario). La estimación de anchoTexto (0,6 × tamaño por carácter) ya queda por encima del ancho
+    // real de Segoe UI o Arial, también en negrita, así que no hace falta otro margen.
+    const double anchoTitulos = ancho - 24.0;
+    const std::vector<std::string> lineasTitulo =
+        partirEnLineas("Curva de convergencia — " + nombreSinExtension(instancia) + " (" + std::to_string(instancia.trabajos) +
+                           " trabajos × " + std::to_string(instancia.maquinas) + " máquinas)",
+                       anchoTitulos, 15.0);
+    const std::vector<std::string> lineasSubtitulo =
+        lineasDeSegmentos({"ABC: " + textoParametros(parametros, instancia.trabajos),
+                           std::to_string(experimento.corridas) + " corridas, semillas " +
+                               std::to_string(semillaDeCorrida(experimento.semillaBase, 1)) + "–" +
+                               std::to_string(semillaDeCorrida(experimento.semillaBase, experimento.corridas))},
+                          " · ", anchoTitulos, 11.0);
+    const double ySubtitulo = y0 + 44.0 + 18.0 * static_cast<double>(lineasTitulo.size() - 1);
 
     // Área del gráfico dentro del panel (márgenes para títulos y ejes).
     const double izquierda = x0 + 80.0;
     const double derecha = x0 + ancho - 22.0;
-    const double arriba = y0 + 66.0;
+    const double arriba = ySubtitulo + 14.0 * static_cast<double>(lineasSubtitulo.size() - 1) + 22.0;
     const double abajo = y0 + alto - 54.0;
 
     // Mediana por iteración y rango de valores de todas las curvas.
@@ -177,17 +239,12 @@ void panelConvergencia(std::ostringstream& svg, const Experimento& experimento, 
     auto Y = [&](double valor) { return abajo - (valor - ejeY.minimo) / (ejeY.maximo - ejeY.minimo) * (abajo - arriba); };
 
     // Títulos.
-    const Instancia& instancia = experimento.instancia;
-    const ParametrosABC& parametros = experimento.parametros;
-    texto(svg, (x0 + x0 + ancho) / 2.0, y0 + 24.0,
-          "Curva de convergencia — " + nombreSinExtension(instancia) + " (" + std::to_string(instancia.trabajos) + " trabajos × " +
-              std::to_string(instancia.maquinas) + " máquinas)",
-          15.0, "middle", "font-weight=\"bold\"");
-    texto(svg, (x0 + x0 + ancho) / 2.0, y0 + 44.0,
-          "ABC: " + textoParametros(parametros, instancia.trabajos) + " · " + std::to_string(experimento.corridas) +
-              " corridas, semillas " + std::to_string(semillaDeCorrida(experimento.semillaBase, 1)) + "–" +
-              std::to_string(semillaDeCorrida(experimento.semillaBase, experimento.corridas)),
-          11.0, "middle", "fill=\"#444444\"");
+    for (std::size_t k = 0; k < lineasTitulo.size(); ++k)
+        texto(svg, x0 + ancho / 2.0, y0 + 24.0 + 18.0 * static_cast<double>(k), lineasTitulo[k], 15.0, "middle",
+              "font-weight=\"bold\"");
+    for (std::size_t k = 0; k < lineasSubtitulo.size(); ++k)
+        texto(svg, x0 + ancho / 2.0, ySubtitulo + 14.0 * static_cast<double>(k), lineasSubtitulo[k], 11.0, "middle",
+              "fill=\"#444444\"");
 
     // Cuadrícula y marcas de los ejes.
     for (const double valor : marcasDelEje(ejeY)) {
@@ -288,31 +345,59 @@ std::string svgGantt(const Instancia& instancia, const std::vector<int>& secuenc
     const int m = instancia.maquinas;
     const int n = static_cast<int>(secuencia.size());
 
-    // Geometría: una fila de 64 px por máquina; el eje de tiempo va de 0 al makespan.
-    const double ancho = 1400.0;
+    // Tabla de inicio y fin: va debajo del gráfico (se omite si la instancia es muy grande). Se mide
+    // primero porque, con muchas máquinas o tiempos grandes, es lo que decide el ancho de la imagen.
+    const bool conTabla = n <= 100 && m <= 30;
+    const double anchoPosicion = 70.0;
+    const double anchoTrabajo = 70.0;
+    const double anchoMaquina =
+        std::max(70.0, anchoTexto(std::to_string(makespan) + "–" + std::to_string(makespan), 12.0) + 18.0);
+    const double anchoTabla = anchoPosicion + anchoTrabajo + anchoMaquina * m;
+    const double altoLineaTabla = 18.0;
+
+    // Geometría: una fila de 64 px por máquina; el eje de tiempo va de 0 al makespan. La imagen mide al
+    // menos 1400 px de ancho y crece si la tabla no cabe. El margen derecho deja lugar al rótulo del makespan.
     const double izquierda = 64.0;
-    const double derecha = ancho - 70.0;
-    const double arriba = 100.0;
+    const double ancho = std::max(1400.0, conTabla ? izquierda + anchoTabla + 30.0 : 0.0);
+    const std::string etiquetaMakespan = "Makespan = " + std::to_string(makespan);
+    const double derecha = ancho - std::max(70.0, anchoTexto(etiquetaMakespan, 13.0) / 2.0 + 12.0);
+
+    // Encabezado: título, subtítulo y secuencia, cada uno en las líneas que necesite (por ejemplo, una
+    // secuencia de 100 trabajos ocupa varias líneas). El gráfico empieza debajo del encabezado.
+    const double anchoTextos = ancho - 80.0;
+    const std::vector<std::string> lineasTitulo =
+        partirEnLineas("Diagrama de Gantt de la mejor secuencia — " + nombreSinExtension(instancia) + " (makespan = " +
+                           std::to_string(makespan) + ")",
+                       anchoTextos, 17.0);
+    const std::vector<std::string> lineasSubtitulo =
+        subtitulo.empty() ? std::vector<std::string>() : partirEnLineas(subtitulo, anchoTextos, 12.0);
+    const std::vector<std::string> lineasSecuencia =
+        partirEnLineas("Secuencia (igual en todas las máquinas): " + textoSecuencia(secuencia), anchoTextos, 12.0);
+    const double yTitulo = 28.0;
+    const double ySubtitulo = yTitulo + 22.0 * static_cast<double>(lineasTitulo.size());
+    const double ySecuencia = ySubtitulo + 16.0 * static_cast<double>(lineasSubtitulo.size()) + 4.0;
+    const double arriba = ySecuencia + 16.0 * static_cast<double>(lineasSecuencia.size() - 1) + 36.0;
+
     const double altoFila = 64.0;
     const double altoBarra = 46.0;
     const double abajo = arriba + altoFila * m;
     const double tiempoMaximo = static_cast<double>(std::max<long long>(makespan, 1));
     auto X = [&](double tiempo) { return izquierda + tiempo / tiempoMaximo * (derecha - izquierda); };
-
-    // La tabla de inicio y fin va debajo del gráfico (se omite si la instancia es muy grande).
-    const bool conTabla = n <= 100 && m <= 30;
-    const double altoLineaTabla = 18.0;
     const double inicioTabla = abajo + 78.0;
     const double alto = conTabla ? inicioTabla + 30.0 + altoLineaTabla * (n + 1) + 20.0 : abajo + 70.0;
 
     std::ostringstream svg;
     svg << inicioSvg(ancho, alto);
-    texto(svg, ancho / 2.0, 28.0,
-          "Diagrama de Gantt de la mejor secuencia — " + nombreSinExtension(instancia) + " (makespan = " +
-              std::to_string(makespan) + ")",
-          17.0, "middle", "font-weight=\"bold\"");
-    if (!subtitulo.empty()) texto(svg, ancho / 2.0, 50.0, subtitulo, 12.0, "middle", "fill=\"#444444\"");
-    texto(svg, ancho / 2.0, 70.0, "Secuencia (igual en todas las máquinas): " + textoSecuencia(secuencia), 12.0, "middle");
+    for (std::size_t k = 0; k < lineasTitulo.size(); ++k)
+        texto(svg, ancho / 2.0, yTitulo + 22.0 * static_cast<double>(k), lineasTitulo[k], 17.0, "middle",
+              "font-weight=\"bold\"");
+    for (std::size_t k = 0; k < lineasSubtitulo.size(); ++k)
+        texto(svg, ancho / 2.0, ySubtitulo + 16.0 * static_cast<double>(k), lineasSubtitulo[k], 12.0, "middle",
+              "fill=\"#444444\"");
+    svg << "<g id=\"secuencia\">\n";
+    for (std::size_t k = 0; k < lineasSecuencia.size(); ++k)
+        texto(svg, ancho / 2.0, ySecuencia + 16.0 * static_cast<double>(k), lineasSecuencia[k], 12.0, "middle");
+    svg << "</g>\n";
 
     // Eje de tiempo con cuadrícula.
     const Eje ejeX = calcularEje(0.0, tiempoMaximo, 12, false);
@@ -358,7 +443,7 @@ std::string svgGantt(const Instancia& instancia, const std::vector<int>& secuenc
     // Línea del makespan: el instante en que termina el último trabajo en la última máquina.
     linea(svg, X(static_cast<double>(makespan)), arriba - 12.0, X(static_cast<double>(makespan)), abajo,
           "stroke=\"#d62728\" stroke-width=\"2\" stroke-dasharray=\"7 4\"");
-    texto(svg, X(static_cast<double>(makespan)), arriba - 18.0, "Makespan = " + std::to_string(makespan), 13.0, "middle",
+    texto(svg, X(static_cast<double>(makespan)), arriba - 18.0, etiquetaMakespan, 13.0, "middle",
           "fill=\"#d62728\" font-weight=\"bold\"");
 
     // Tabla: inicio y fin de cada operación (fila = posición en la secuencia, columna = máquina).
@@ -367,10 +452,6 @@ std::string svgGantt(const Instancia& instancia, const std::vector<int>& secuenc
               "Inicio–fin de cada operación (fila = posición en la secuencia, columna = máquina). "
               "El último valor de la tabla es el makespan.",
               12.5, "start", "font-weight=\"bold\"");
-        const double anchoPosicion = 70.0;
-        const double anchoTrabajo = 70.0;
-        const std::string ejemplo = std::to_string(makespan) + "–" + std::to_string(makespan);
-        const double anchoMaquina = std::max(70.0, anchoTexto(ejemplo, 12.0) + 18.0);
         const double yEncabezado = inicioTabla + 26.0;
         svg << "<g font-family=\"" << FUENTE_TABLA << "\">\n";
         texto(svg, izquierda, yEncabezado, "Posición", 12.0, "start", "font-weight=\"bold\"");
@@ -378,7 +459,6 @@ std::string svgGantt(const Instancia& instancia, const std::vector<int>& secuenc
         for (int j = 0; j < m; ++j)
             texto(svg, izquierda + anchoPosicion + anchoTrabajo + anchoMaquina * (j + 1) - 10.0, yEncabezado,
                   "M" + std::to_string(j + 1), 12.0, "end", "font-weight=\"bold\"");
-        const double anchoTabla = anchoPosicion + anchoTrabajo + anchoMaquina * m;
         linea(svg, izquierda, yEncabezado + 5.0, izquierda + anchoTabla, yEncabezado + 5.0, "stroke=\"#333333\"");
         for (const Operacion& operacion : operaciones) {
             const double yFila = yEncabezado + altoLineaTabla * (operacion.posicion + 1);
