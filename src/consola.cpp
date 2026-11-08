@@ -232,12 +232,6 @@ void mostrarExperimento(const Experimento& experimento, std::ostream& salida) {
            << " de " << ciclos << "\n";
     salida << "  Evaluaciones del makespan por corrida (promedio): " << formatoDecimal(resumen.evaluacionesPromedio, 1)
            << ";  abejas exploradoras por corrida (promedio): " << formatoDecimal(resumen.abandonosPromedio, 2) << "\n";
-    if (resumen.referencia > 0) {
-        salida << "  Makespan de referencia (mejor conocido) = " << resumen.referencia << ": lo alcanzan "
-               << resumen.exitos << " de " << resumen.corridas << " corridas;  BRE = " << formatoDecimal(resumen.bre, 3)
-               << " %,  ARE = " << formatoDecimal(resumen.are, 3) << " %,  WRE = " << formatoDecimal(resumen.wre, 3)
-               << " %\n";
-    }
 
     // --- Mejor solución y su tabla de finalización (enunciado §3.3) -----------------------------
     salida << "\nMEJOR SECUENCIA ENCONTRADA : " << textoPermutacion(mejorSecuencia) << "\n";
@@ -299,10 +293,8 @@ void mostrarTablaResumen(const std::vector<Experimento>& experimentos, std::ostr
     tabla.agregarColumna("Makespan promedio", true);
     tabla.agregarColumna("Desviación estándar", true);
     tabla.agregarColumna("Tiempo promedio (ms)", true);
-    bool hayReferencias = false;
     for (const Experimento& experimento : experimentos) {
         const Resumen& resumen = experimento.resumen;
-        hayReferencias = hayReferencias || resumen.referencia > 0;
         tabla.agregarFila({nombreSinExtension(experimento.instancia),
                            std::to_string(experimento.instancia.trabajos) + " x " + std::to_string(experimento.instancia.maquinas),
                            std::to_string(resumen.mejor), std::to_string(resumen.peor), formatoDecimal(resumen.promedio, 3),
@@ -317,31 +309,4 @@ void mostrarTablaResumen(const std::vector<Experimento>& experimentos, std::ostr
                << "  (makespan " << corrida.mejorCmax << ", corrida " << experimento.resumen.indiceMejor + 1 << ", semilla "
                << corrida.semilla << ")\n";
     }
-
-    if (!hayReferencias) return;
-    salida << "\nCalidad frente al makespan de referencia (mejor conocido):\n";
-    TablaTexto calidad;
-    calidad.agregarColumna("Instancia", false);
-    calidad.agregarColumna("Referencia", true);
-    calidad.agregarColumna("Éxitos", true);
-    calidad.agregarColumna("BRE (%)", true);
-    calidad.agregarColumna("ARE (%)", true);
-    calidad.agregarColumna("WRE (%)", true);
-    calidad.agregarColumna("Iter. prom. del mejor", true);
-    calidad.agregarColumna("Evaluaciones prom.", true);
-    for (const Experimento& experimento : experimentos) {
-        const Resumen& resumen = experimento.resumen;
-        if (resumen.referencia <= 0) {
-            calidad.agregarFila({nombreSinExtension(experimento.instancia), "-", "-", "-", "-", "-",
-                                 formatoDecimal(resumen.cicloMejorPromedio, 1), formatoDecimal(resumen.evaluacionesPromedio, 1)});
-            continue;
-        }
-        calidad.agregarFila({nombreSinExtension(experimento.instancia), std::to_string(resumen.referencia),
-                             std::to_string(resumen.exitos) + "/" + std::to_string(resumen.corridas),
-                             formatoDecimal(resumen.bre, 3), formatoDecimal(resumen.are, 3), formatoDecimal(resumen.wre, 3),
-                             formatoDecimal(resumen.cicloMejorPromedio, 1), formatoDecimal(resumen.evaluacionesPromedio, 1)});
-    }
-    calidad.imprimir(salida);
-    salida << "  Éxito = corrida que alcanza la referencia. BRE, ARE y WRE = error relativo (%) del mejor, del promedio\n"
-              "  y del peor makespan frente a la referencia. La referencia solo se usa para este cálculo.\n";
 }

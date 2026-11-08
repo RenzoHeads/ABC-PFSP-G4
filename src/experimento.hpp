@@ -17,6 +17,7 @@
 #include "instancia.hpp"
 
 // Estadísticas de un conjunto de corridas: la tabla resumen del enunciado y algunos datos extra.
+// Se calculan solo con los resultados de las corridas: no se compara con ningún valor externo.
 struct Resumen {
     int corridas = 0;
     long long mejor = 0;              // menor makespan obtenido entre todas las corridas
@@ -29,14 +30,6 @@ struct Resumen {
     double cicloMejorPromedio = 0.0;  // en promedio, en qué iteración apareció el mejor valor final
     double abandonosPromedio = 0.0;   // en promedio, cuántas veces actuó la abeja exploradora
     std::size_t indiceMejor = 0;      // índice (desde 0) de la PRIMERA corrida que obtuvo el mejor makespan
-
-    // Solo si se indicó un makespan de referencia (el mejor valor conocido de la literatura).
-    // La referencia NO interviene en la búsqueda: solo sirve para medir la calidad al final.
-    long long referencia = 0;  // 0 = sin referencia
-    int exitos = 0;            // corridas cuyo makespan es <= referencia
-    double bre = 0.0;          // error relativo del mejor   = (mejor - ref) / ref * 100
-    double are = 0.0;          // error relativo del promedio = (promedio - ref) / ref * 100
-    double wre = 0.0;          // error relativo del peor    = (peor - ref) / ref * 100
 };
 
 // Todo lo necesario para reportar un experimento: datos de entrada, corridas y resumen.
@@ -52,13 +45,12 @@ struct Experimento {
 // Semilla de la corrida k (desde 1): semillaBase + k - 1 (aritmética de 32 bits sin signo).
 std::uint32_t semillaDeCorrida(std::uint32_t semillaBase, int corrida);
 
-// Ejecuta 'corridas' corridas independientes del ABC y calcula su resumen.
-// 'referencia' es opcional (0 = sin referencia) y solo se usa en el resumen.
+// Ejecuta 'corridas' corridas independientes del ABC sobre la instancia y calcula su resumen.
 Experimento ejecutarExperimento(const Instancia& instancia, const ParametrosABC& parametros, int corridas,
-                                std::uint32_t semillaBase, long long referencia);
+                                std::uint32_t semillaBase);
 
 // Estadísticas de las corridas (lanza std::invalid_argument si la lista está vacía).
-Resumen resumirCorridas(const std::vector<ResultadoCorrida>& resultados, long long referencia);
+Resumen resumirCorridas(const std::vector<ResultadoCorrida>& resultados);
 
 // Mediana de una lista de valores (lista no vacía).
 double mediana(std::vector<double> valores);

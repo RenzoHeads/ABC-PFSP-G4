@@ -9,7 +9,8 @@
 //   <instancia>_gantt.csv         inicio y fin de cada operación de la mejor secuencia:
 //                                 datos del diagrama de Gantt (§5.4)
 //   <instancia>_resumen.csv       mejor, peor, promedio, desviación estándar, tiempo
-//                                 promedio y mejor secuencia (§5.2), más datos extra
+//                                 promedio y mejor secuencia (§5.2), más los parámetros
+//                                 y datos de la búsqueda (evaluaciones, exploradoras...)
 // Si se resuelven varias instancias en la misma ejecución, además:
 //   resumen_general.csv           la tabla resumen con una fila por instancia
 // Todos usan coma como separador y punto decimal.

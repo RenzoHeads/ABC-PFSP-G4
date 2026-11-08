@@ -191,7 +191,6 @@ void panelConvergencia(std::ostringstream& svg, const Experimento& experimento, 
                        double alto) {
     const std::vector<ResultadoCorrida>& resultados = experimento.resultados;
     const int ciclos = ciclosEfectivos(experimento.parametros, experimento.instancia.trabajos);
-    const long long referencia = experimento.resumen.referencia;
     const Instancia& instancia = experimento.instancia;
     const ParametrosABC& parametros = experimento.parametros;
 
@@ -231,7 +230,6 @@ void panelConvergencia(std::ostringstream& svg, const Experimento& experimento, 
         }
         medianas[c] = mediana(valores);
     }
-    if (referencia > 0) menor = std::min(menor, static_cast<double>(referencia));
     const double margen = 0.05 * (mayor - menor);
     const Eje ejeY = calcularEje(menor - margen, mayor + margen, 6, true);
     const Eje ejeX = calcularEje(0.0, static_cast<double>(std::max(ciclos, 1)), 6, false);
@@ -272,21 +270,17 @@ void panelConvergencia(std::ostringstream& svg, const Experimento& experimento, 
         svg << "\"/>\n";
     };
     for (const ResultadoCorrida& corrida : resultados) {
-        std::vector<double> valores(corrida.convergencia.begin(), corrida.convergencia.end());
+        std::vector<double> valores;  // la curva de la corrida (makespans enteros) en el tipo que usa el dibujo
+        valores.reserve(corrida.convergencia.size());
+        for (const long long valor : corrida.convergencia) valores.push_back(static_cast<double>(valor));
         polilinea(valores, "stroke=\"#b5b5b5\" stroke-width=\"1\" stroke-opacity=\"0.8\"");
     }
-    if (referencia > 0)
-        linea(svg, izquierda, Y(static_cast<double>(referencia)), derecha, Y(static_cast<double>(referencia)),
-              "stroke=\"#2ca02c\" stroke-width=\"1.5\" stroke-dasharray=\"6 4\"");
     polilinea(medianas, "stroke=\"#1f77b4\" stroke-width=\"2.5\"");
 
     // Leyenda (arriba a la derecha, dentro del gráfico).
-    std::vector<std::pair<std::string, std::string>> leyenda = {
+    const std::vector<std::pair<std::string, std::string>> leyenda = {
         {"stroke=\"#b5b5b5\" stroke-width=\"2\"", "Cada corrida (" + std::to_string(resultados.size()) + ")"},
         {"stroke=\"#1f77b4\" stroke-width=\"2.5\"", "Mediana de las corridas (final: " + textoEntero(medianas.back()) + ")"}};
-    if (referencia > 0)
-        leyenda.push_back({"stroke=\"#2ca02c\" stroke-width=\"1.5\" stroke-dasharray=\"6 4\"",
-                           "Referencia (mejor conocido) = " + std::to_string(referencia)});
     double anchoLeyenda = 0.0;
     for (const auto& entrada : leyenda) anchoLeyenda = std::max(anchoLeyenda, anchoTexto(entrada.second, 11.0));
     anchoLeyenda += 52.0;

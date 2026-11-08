@@ -49,12 +49,11 @@ std::string texto(long long valor) {
 }
 
 // Columnas del resumen: las 8 primeras son las de la tabla del enunciado (§5.2) y las demás
-// documentan las condiciones del experimento y la calidad frente a la referencia.
+// documentan las condiciones del experimento (tamaño, semillas y parámetros) y cómo avanzó la búsqueda.
 const std::vector<std::string> COLUMNAS_RESUMEN = {
     "instancia", "corridas", "mejor", "peor", "promedio", "desviacion_muestral", "tiempo_promedio_ms", "mejor_secuencia",
     "trabajos", "maquinas", "semilla_inicial", "corrida_mejor", "semilla_mejor", "fuentes", "limite", "ciclos",
-    "evaluaciones_promedio", "ciclo_mejor_promedio", "abandonos_promedio",
-    "referencia", "exitos", "bre", "are", "wre"};
+    "evaluaciones_promedio", "ciclo_mejor_promedio", "abandonos_promedio"};
 
 std::vector<std::string> camposResumen(const Experimento& experimento) {
     const Resumen& resumen = experimento.resumen;
@@ -62,21 +61,12 @@ std::vector<std::string> camposResumen(const Experimento& experimento) {
     const ResultadoCorrida& corridaMejor = experimento.resultados[resumen.indiceMejor];
     const int limite = limiteEfectivo(parametros, experimento.instancia.trabajos);
     const int ciclos = ciclosEfectivos(parametros, experimento.instancia.trabajos);
-    std::vector<std::string> campos = {
-        experimento.instancia.nombre, texto(resumen.corridas), texto(resumen.mejor), texto(resumen.peor),
-        formatoDecimal(resumen.promedio, 4), formatoDecimal(resumen.desviacion, 4), formatoDecimal(resumen.tiempoPromedioMs, 4),
-        textoSecuencia(corridaMejor.mejorSecuencia), texto(experimento.instancia.trabajos), texto(experimento.instancia.maquinas),
-        texto(experimento.semillaBase), texto(static_cast<long long>(resumen.indiceMejor) + 1), texto(corridaMejor.semilla),
-        texto(parametros.fuentes), texto(limite), texto(ciclos), formatoDecimal(resumen.evaluacionesPromedio, 2),
-        formatoDecimal(resumen.cicloMejorPromedio, 2), formatoDecimal(resumen.abandonosPromedio, 2)};
-    if (resumen.referencia > 0) {
-        for (const std::string& valor : {texto(resumen.referencia), texto(resumen.exitos), formatoDecimal(resumen.bre, 4),
-                                         formatoDecimal(resumen.are, 4), formatoDecimal(resumen.wre, 4)})
-            campos.push_back(valor);
-    } else {
-        campos.resize(COLUMNAS_RESUMEN.size());  // sin referencia: las 5 últimas columnas quedan vacías
-    }
-    return campos;
+    return {experimento.instancia.nombre, texto(resumen.corridas), texto(resumen.mejor), texto(resumen.peor),
+            formatoDecimal(resumen.promedio, 4), formatoDecimal(resumen.desviacion, 4), formatoDecimal(resumen.tiempoPromedioMs, 4),
+            textoSecuencia(corridaMejor.mejorSecuencia), texto(experimento.instancia.trabajos), texto(experimento.instancia.maquinas),
+            texto(experimento.semillaBase), texto(static_cast<long long>(resumen.indiceMejor) + 1), texto(corridaMejor.semilla),
+            texto(parametros.fuentes), texto(limite), texto(ciclos), formatoDecimal(resumen.evaluacionesPromedio, 2),
+            formatoDecimal(resumen.cicloMejorPromedio, 2), formatoDecimal(resumen.abandonosPromedio, 2)};
 }
 
 }  // namespace

@@ -41,20 +41,6 @@ bool pareceTrabajo(const std::string& texto) {
            texto.find_first_not_of("0123456789Jj,[]") == std::string::npos;
 }
 
-// "52,7720,7312" -> {52, 7720, 7312}
-std::vector<long long> leerListaReferencias(const std::string& texto) {
-    std::vector<long long> referencias;
-    std::size_t inicio = 0;
-    while (true) {
-        const std::size_t coma = texto.find(',', inicio);
-        const std::string parte = texto.substr(inicio, coma == std::string::npos ? std::string::npos : coma - inicio);
-        referencias.push_back(leerEntero(parte, "--referencia", 1, 1000000000000000LL));
-        if (coma == std::string::npos) break;
-        inicio = coma + 1;
-    }
-    return referencias;
-}
-
 }  // namespace
 
 Configuracion leerArgumentos(const std::vector<std::string>& argumentos) {
@@ -81,8 +67,6 @@ Configuracion leerArgumentos(const std::vector<std::string>& argumentos) {
             configuracion.corridas = static_cast<int>(leerEntero(valor(), argumento, 1, MAXIMO_CORRIDAS));
         } else if (argumento == "--semilla") {
             configuracion.semillaBase = static_cast<std::uint32_t>(leerEntero(valor(), argumento, 0, 4294967295LL));
-        } else if (argumento == "--referencia") {
-            configuracion.referencias = leerListaReferencias(valor());
         } else if (argumento == "--salida") {
             configuracion.carpetaSalida = valor();
             if (configuracion.carpetaSalida.empty()) throw std::invalid_argument("--salida necesita el nombre de una carpeta.");
@@ -109,10 +93,6 @@ void validarConfiguracion(const Configuracion& configuracion) {
         throw std::invalid_argument("No se indicó ningún archivo de instancia (.txt).");
     if (!configuracion.secuenciaEvaluar.empty() && configuracion.rutasInstancias.size() != 1)
         throw std::invalid_argument("--evaluar necesita exactamente un archivo de instancia.");
-    if (!configuracion.referencias.empty() && configuracion.referencias.size() != configuracion.rutasInstancias.size())
-        throw std::invalid_argument("--referencia trae " + std::to_string(configuracion.referencias.size()) +
-                                    " valor(es), pero hay " + std::to_string(configuracion.rutasInstancias.size()) +
-                                    " instancia(s): debe haber uno por instancia, en el mismo orden.");
     // Dos archivos con el mismo nombre escribirían los mismos archivos de resultados.
     std::set<std::string> nombres;
     for (const std::string& ruta : configuracion.rutasInstancias) {
@@ -171,9 +151,6 @@ std::string textoAyuda() {
         "                       y Basturk, 2007: 500, 750 y 1000 ciclos para 10, 20 y 30 variables)\n"
         "  --corridas N         corridas independientes por instancia                      [30]\n"
         "  --semilla N          semilla base: la corrida k usa la semilla N + k - 1        [12345]\n"
-        "  --referencia C[,C]   makespan de referencia (mejor conocido) de cada instancia, en el\n"
-        "                       mismo orden. Solo se usa para reportar éxitos y errores relativos;\n"
-        "                       el algoritmo NO lo usa para buscar ni para detenerse.\n"
         "  --salida CARPETA     carpeta de los resultados CSV y SVG                        [resultados]\n"
         "  --evaluar SECUENCIA  solo calcula la tabla C, el Gantt y el makespan de la secuencia dada,\n"
         "                       sin ejecutar el ABC. Ejemplo: --evaluar J3 J1 J4 J2 J5\n"
@@ -181,9 +158,10 @@ std::string textoAyuda() {
         "\n"
         "Ejemplos:\n"
         "  abc_pfsp.exe instancias\\instancia1_bas1.txt\n"
-        "  abc_pfsp.exe instancias\\instancia3_car3.txt --referencia 7312 --corridas 10\n"
+        "  abc_pfsp.exe instancias\\instancia3_car3.txt --corridas 10\n"
         "  abc_pfsp.exe instancias\\instancia1_bas1.txt instancias\\instancia2_car5.txt instancias\\instancia3_car3.txt\n"
-        "               --referencia 52,7720,7312 --salida resultados\\E1\n"
-        "  abc_pfsp.exe instancias\\instancia3_car3.txt --corridas 1 --semilla 12350   (repite una corrida)\n"
+        "               --salida resultados\\E1\n"
+        "  abc_pfsp.exe instancias\\instancia3_car3.txt --corridas 1 --semilla 12350 --salida resultados\\una_corrida\n"
+        "               (repite una sola corrida, la de semilla 12350, sin reemplazar otros resultados)\n"
         "  abc_pfsp.exe instancias\\instancia1_bas1.txt --evaluar J3 J1 J4 J2 J5       (ejemplo del enunciado: 57)\n";
 }

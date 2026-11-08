@@ -15,7 +15,6 @@
 
 struct Configuracion {
     std::vector<std::string> rutasInstancias;  // archivos .txt a resolver, en orden
-    std::vector<long long> referencias;        // vacío, o un makespan de referencia por instancia (mismo orden)
     ParametrosABC parametros;                  // SN, límite y MCN
     int corridas = 30;                         // corridas independientes por instancia (el enunciado pide >= 10)
     std::uint32_t semillaBase = 12345;         // la corrida k usa semillaBase + k - 1
@@ -28,8 +27,8 @@ struct Configuracion {
 // con un mensaje claro si una opción no existe o un valor no es válido.
 Configuracion leerArgumentos(const std::vector<std::string>& argumentos);
 
-// Comprobaciones que dependen de todas las opciones juntas (por ejemplo, que haya una
-// referencia por instancia). Se llama cuando ya se conocen las rutas de las instancias.
+// Comprobaciones que dependen de todas las opciones juntas (por ejemplo, que no haya dos
+// instancias con el mismo nombre). Se llama cuando ya se conocen las rutas de las instancias.
 void validarConfiguracion(const Configuracion& configuracion);
 
 // Comprueba que la curva de convergencia de una instancia quepa en memoria: (MCN + 1) × corridas

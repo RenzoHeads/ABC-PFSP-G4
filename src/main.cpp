@@ -39,7 +39,7 @@ std::string limpiarTexto(const std::string& texto) {
     return texto.substr(inicio, fin - inicio + 1);
 }
 
-// Modo interactivo (doble clic): pide la ruta del archivo y, opcionalmente, el makespan de referencia.
+// Modo interactivo (doble clic): pide la ruta del archivo .txt de la instancia.
 bool pedirDatosPorTeclado(Configuracion& configuracion) {
     std::cout << "ABC-PFSP (Grupo 4): Artificial Bee Colony para el Permutation Flow Shop Scheduling Problem\n\n"
               << "Escriba la ruta del archivo .txt de la instancia (o arrástrelo a esta ventana) y presione Enter.\n"
@@ -47,11 +47,6 @@ bool pedirDatosPorTeclado(Configuracion& configuracion) {
     std::string ruta;
     if (!leerLineaUtf8(ruta) || limpiarTexto(ruta).empty()) return false;
     configuracion.rutasInstancias.push_back(limpiarTexto(ruta));
-
-    std::cout << "Makespan de referencia (mejor conocido) para medir el error; Enter para omitirlo:\n> " << std::flush;
-    std::string referencia;
-    if (leerLineaUtf8(referencia) && !limpiarTexto(referencia).empty())
-        configuracion.referencias = leerArgumentos({"--referencia", limpiarTexto(referencia)}).referencias;  // misma validación
 
     std::cout << "\nSe usan los parámetros por defecto (" << textoParametros(configuracion.parametros, 0) << ", "
               << configuracion.corridas << " corridas).\nPara cambiarlos, ejecute el programa desde la consola con "
@@ -104,9 +99,8 @@ int ejecutar(const std::vector<std::string>& argumentos) {
     for (std::size_t k = 0; k < instancias.size(); ++k) {
         std::cout << "\n";
         mostrarInstancia(instancias[k], std::cout);
-        const long long referencia = configuracion.referencias.empty() ? 0 : configuracion.referencias[k];
         experimentos.push_back(ejecutarExperimento(instancias[k], configuracion.parametros, configuracion.corridas,
-                                                   configuracion.semillaBase, referencia));
+                                                   configuracion.semillaBase));
         const Experimento& experimento = experimentos.back();
         mostrarExperimento(experimento, std::cout);
 

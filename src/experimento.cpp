@@ -12,7 +12,7 @@ std::uint32_t semillaDeCorrida(std::uint32_t semillaBase, int corrida) {
 }
 
 Experimento ejecutarExperimento(const Instancia& instancia, const ParametrosABC& parametros, int corridas,
-                                std::uint32_t semillaBase, long long referencia) {
+                                std::uint32_t semillaBase) {
     if (corridas < 1) throw std::invalid_argument("El número de corridas debe ser al menos 1.");
 
     Experimento experimento;
@@ -26,11 +26,11 @@ Experimento ejecutarExperimento(const Instancia& instancia, const ParametrosABC&
         ColoniaABC colonia(experimento.instancia, parametros, semillaDeCorrida(semillaBase, corrida));
         experimento.resultados.push_back(colonia.ejecutar());
     }
-    experimento.resumen = resumirCorridas(experimento.resultados, referencia);
+    experimento.resumen = resumirCorridas(experimento.resultados);
     return experimento;
 }
 
-Resumen resumirCorridas(const std::vector<ResultadoCorrida>& resultados, long long referencia) {
+Resumen resumirCorridas(const std::vector<ResultadoCorrida>& resultados) {
     if (resultados.empty()) throw std::invalid_argument("No hay corridas que resumir.");
     Resumen resumen;
     resumen.corridas = static_cast<int>(resultados.size());
@@ -68,16 +68,6 @@ Resumen resumirCorridas(const std::vector<ResultadoCorrida>& resultados, long lo
         sumaCuadrados += diferencia * diferencia;
     }
     resumen.desviacion = (resultados.size() > 1) ? std::sqrt(sumaCuadrados / (cantidad - 1.0)) : 0.0;
-
-    if (referencia > 0) {
-        const double ref = static_cast<double>(referencia);
-        resumen.referencia = referencia;
-        for (const ResultadoCorrida& corrida : resultados)
-            if (corrida.mejorCmax <= referencia) ++resumen.exitos;
-        resumen.bre = 100.0 * (static_cast<double>(resumen.mejor) - ref) / ref;
-        resumen.are = 100.0 * (resumen.promedio - ref) / ref;
-        resumen.wre = 100.0 * (static_cast<double>(resumen.peor) - ref) / ref;
-    }
     return resumen;
 }
 
